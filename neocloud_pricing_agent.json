@@ -1,0 +1,825 @@
+{
+  "name": "Neocloud Pricing Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "responseMode": "responseNodes"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8aaa6356-0b05-4215-ad26-a71c5f17e746",
+      "name": "When chat message received",
+      "webhookId": "20e3f18c-5d38-4e36-ae4b-39003c7e0c4f"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=You coordinate a research team that compares AI neocloud GPU pricing for investors.\nToday's date is {{ $now.toFormat('yyyy-MM-dd') }}.\n\nThe user names a target company (for example Nebius / NBIS). Use the ticker in capitals as the target key, or the company name in capitals if it is private (for example LAMBDA).\n\nFollow these steps in order. Do not skip, merge, or reorder them.\n1. If the input is not a recognizable AI cloud, GPU cloud, or data-center company, ask the user to clarify and stop.\n2. Call get_past_brief with the target key. Note whether a previous brief exists, its run_date, and its prices_json.\n3. Call discovery_agent with the target name and ticker.\n4. Immediately call save_competitor_list with the target key and every competitor discovery_agent returned, unchanged. Do not ask the user in chat, do not drop or swap competitors yourself, and do not comment on them first. The approval prompt is where the user decides.\n   - If it is denied, ask the user which competitors to use, wait for the reply, then call save_competitor_list again with their list. For any competitor the user typed, write only its name and \"user-supplied\" for ticker, business model, reason, and source. Never fill these in from memory.\n   - Do not go to step 5 until save_competitor_list succeeds.\n   - After save_competitor_list succeeds, continue straight to step 5 in the same turn. Do not reply to the user until step 10.\n5. Call research_agent once for the target and once for each approved competitor.\n6. Call extraction_agent once per company, passing that company's research notes unchanged.\n7. Call normalize_prices once with a JSON string: {\"target\": \"<target name>\", \"rows\": [every price_rows item from step 6], \"previous_rows\": \"<prices_json text from step 2, or empty>\"}. If it returns an ERROR, fix the JSON and call it once more.\n8. Write the brief in the format below, using only tool outputs. Build the price table from the \"table\" lines of normalize_prices, and copy gaps, conflicts, and changes exactly. Do not calculate anything yourself. Use exactly the headings in the Brief format. Do not add an executive summary, a conclusion, recommendations, or opinions. Keep the brief under 900 words.\n9. Call save_brief with the target key, the brief, and the \"prices_compact\" text from normalize_prices as prices_json. This needs the user's approval. If it is denied, ask what to change, revise, and call save_brief again.\n10. After save_brief succeeds, reply with the brief.\n\nRules:\n- Never end your turn early. The only replies to the user before the final brief are the clarifying question in step 1 and the questions after a denied approval.\n- Never state a price, date, ticker, or fact from your own memory. Every price and fact needs a source URL from a tool result.\n- Use exactly the date shown at the top of these instructions as the brief date and the retrieval date. Do not change it.\n- If a provider does not offer a price type (for example spot), write \"not offered\". If the price requires contacting sales, write \"contact sales\". If no source was found, write \"not found\". Never estimate a missing price.\n- Do not call a company cheapest, or say it has no public pricing, if the price table shows \"not found\" for its competitors. Say instead that competitor prices were not found.\n- Prices derived from ARR or revenue disclosures must be labeled \"implied\" and show the inputs.\n- If a tool returns an error or nothing, retry it once. If it fails again, write \"No data: <tool> failed\" in that section and continue.\n- If two sources give different prices for the same item, show both and mark the conflict. Provider pages outrank filings, and filings outrank third-party trackers.\n- Keep every label from normalize_prices, including \"assumed node price\" and \"blog/news source, verify\".\n- Companies that lease data-center space or power instead of selling GPU-hours are \"hosting/colocation, no GPU-hour pricing\".\n- Write plain markdown. Do not use LaTeX or $...$ math notation; write prices as plain text like $2.90.\n\nBrief format:\n# Neocloud GPU pricing brief: <Target> vs <Competitor 1>, <Competitor 2>, <Competitor 3> (<date>)\n## Summary\nThree bullets: the cheapest on-demand and spot price per GPU model among prices actually found, where the target sits, and the most important recent news.\n## Price table ($ per GPU-hour)\nGPU | Price type | <Target> | <C1> | <C2> | <C3>\nEach cell: price with [source number], or not offered / contact sales / not found / implied $x [source]. Keep labels such as \"assumed node price\".\n## Price gaps vs <Target>\nThe gaps list from normalize_prices. Positive means the competitor is more expensive.\n## Changes since last brief\nThe changes list from normalize_prices, or \"First brief for this company.\"\n## Company snapshots\nFor each company, at most 4 short lines built only from research_agent FACTS and NEWS (never from the competitor list): business model (public rate card, contracts, or hosting), GPU offering, positioning, and at most 2 news items from the last 30 days (date, headline, [source]). If research found nothing, write \"not found\".\n## Conflicts and gaps\n## Sources\nOnly sources cited above. [n] URL | provider page / company filing or release / third-party tracker / blog | retrieved <date>\n## What this brief cannot see\nLarge customers usually sign private multi-year contracts. Those prices are not public and can differ from list prices.",
+          "maxIterations": 25
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a904d901-f6e3-45c3-b8dd-6020a75dc09d",
+      "name": "Orchestrator"
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        -96,
+        208
+      ],
+      "id": "3d3868fb-2943-4abb-89fc-27e15b30129b",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1.3,
+      "position": [
+        1088,
+        -16
+      ],
+      "id": "a5579f6a-1d3f-4163-9862-b8c4364d8bf9",
+      "name": "Chat",
+      "webhookId": "e11a7b54-0631-49d7-8cc3-10aad4a2d571"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Returns previous briefs and their prices_json for a target key. Empty if none. Data table",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "dHm4O228179CORMC",
+          "mode": "list",
+          "cachedResultName": "briefs",
+          "cachedResultUrl": "/projects/LLAYxJBg6QJzjwb6/datatables/dHm4O228179CORMC"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "target",
+              "keyValue": "={{ $fromAI('target', 'Target key: ticker in capitals, or private company name in capitals', 'string') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        48,
+        192
+      ],
+      "id": "5c38a641-52d9-4e98-8fcb-18f041e2f274",
+      "name": "get_past_brief"
+    },
+    {
+      "parameters": {
+        "toolDescription": " Finds up to 3 direct competitors of a neocloud, with business model and a source URL for each.",
+        "text": "= {{ $fromAI('target', 'Target company name and ticker, for example Nebius (NBIS)', 'string') }}",
+        "options": {
+          "systemMessage": "=You find the 3 most direct competitors of an AI cloud (neocloud) company.\nToday's date is {{ $now.toFormat('yyyy-MM-dd') }}.\n\n1. Run at most 2 searches, for example \"<target> competitors GPU cloud\" and \"<target> vs CoreWeave Lambda GPU pricing\".\n2. Choose 3 companies that rent NVIDIA GPU capacity to AI customers in the same market as the target. Prefer companies named as competitors in the target's own filings or in at least one search result.\n3. For each company, classify its business model: public rate card (it publishes per-hour GPU prices), contract-only (no published prices), or hosting/colocation (leases space or power, not GPU-hours).\n\nRules:\n- Copy each company name exactly as it is spelled in the source. Do not guess or alter names.\n- A category word such as \"neocloud\" or \"GPU cloud\" is not a company name.\n- Ticker: write the stock ticker only if a source shows it. Otherwise write \"private or unknown\".\n- The source URL for each company must be a page that names that company. Do not cite a page that does not mention it.\n- Only classify a business model if a source supports it. Otherwise write \"unverified\".\n- Use only search results. Never use your own memory.\n\nReturn exactly this format, one line per competitor:\nName | Ticker or \"private or unknown\" | Business model | One-sentence reason | Source URL\n\nIf you find fewer than 3 sourced competitors, return fewer and say why.",
+          "maxIterations": 6
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        160,
+        192
+      ],
+      "id": "9f742298-66ba-4e36-bf72-a15c38c2959f",
+      "name": "discovery_agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+          "mode": "list",
+          "cachedResultName": "Qwen/Qwen3-30B-A3B-Instruct-2507"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -240,
+        448
+      ],
+      "id": "7957b127-586f-490a-9580-0a3eda68346c",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "2QQQxu6ZRey31Hj5",
+          "name": "Nebius"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search the web in Tavily",
+        "topic": "general",
+        "timeRange": "any",
+        "searchDepth": "basic",
+        "includeAnswer": "none",
+        "options": {
+          "max_results": 5
+        }
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        448
+      ],
+      "id": "8b0c8ed3-6dbc-481b-a426-480c1db71932",
+      "name": "Search the web in Tavily",
+      "credentials": {
+        "tavilyApi": {
+          "id": "QzXYNegh16CMIxgE",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Records the competitor list. Requires the user's approval",
+        "dataTableId": {
+          "__rl": true,
+          "value": "lMJhFLcjRq1XjwdC",
+          "mode": "list",
+          "cachedResultName": "competitor_runs",
+          "cachedResultUrl": "/projects/LLAYxJBg6QJzjwb6/datatables/lMJhFLcjRq1XjwdC"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "target": "={{ $fromAI('target', 'Target key', 'string') }}",
+            "competitors": "={{ $fromAI('competitors', 'Approved competitor list as a markdown bullet list, one competitor per line: - Name | Ticker or private | Business model | One-sentence reason | Source URL', 'string') }}",
+            "run_date": "={{ $now.toFormat('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "competitors",
+              "displayName": "competitors",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        1584,
+        304
+      ],
+      "id": "e21daf14-52c7-4b2b-a6a8-cedd4a937bab",
+      "name": "save_competitor_list"
+    },
+    {
+      "parameters": {
+        "message": "=   Approve these competitors for {{ $tool.parameters.target }}?\n\n   {{ $tool.parameters.competitors }}\nDisapprove to replace them; then type the list you want.",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "disapproveLabel": "replace"
+          }
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatHitlTool",
+      "typeVersion": 1.3,
+      "position": [
+        1248,
+        160
+      ],
+      "id": "e534be75-de16-4ca1-8ceb-b84d9f09f815",
+      "name": "gate_1_competitors",
+      "webhookId": "f4750267-47d7-4f31-9fb1-0503d5ce7543"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Gathers pricing evidence (rate card, filings) and last-30-day news for ONE company. Call once per company.",
+        "text": "={{ $fromAI('company', 'One company name to research', 'string') }}",
+        "options": {
+          "systemMessage": "=You gather pricing evidence and recent news for ONE GPU cloud company.\nToday's date is {{ $now.toFormat('yyyy-MM-dd') }}.\nGPU models in scope: H100, H200, B200, B300, GB200, GB300.\n\nSteps:\n1. Use tavily_search to find the company's official GPU pricing page (for example \"<company> GPU pricing per hour\"). Prefer the company's own domain.\n2. Call tavily_extract on that URL. Copy every price line for in-scope GPUs exactly as written, including the unit (per GPU or per node, and GPUs per node) and the price type (on-demand, spot, preemptible, reserved).\n3. If the company has no public rate card, or the page has no prices, search for its latest earnings release or investor update. Copy any disclosed GPU pricing, GPU counts, or ARR figures exactly as written.\n4. Only if steps 2 and 3 found no prices, search one third-party GPU price tracker and mark those lines \"tracker\".\n5. Run one tavily_news search for the company.\n\nTool budget per company: at most 3 tavily_search calls, 1 tavily_extract call, and 1 tavily_news call. Stop searching once you have the pricing page.\n\nRules for PRICES lines:\n- Every PRICES line must start with the GPU model and the number of GPUs, for example: \"HGX H100 (8 GPUs) | on-demand | $49.24 per hour\". If the page lists a price without a GPU model, skip that line.\n- Only copy H100, H200, B200, B300, GB200, and GB300 lines. Drop every other GPU, even if the page lists it.\n- If the page lists several instance sizes for the same GPU, copy only the 8-GPU configuration and write \"(8 GPUs)\".\n- Use one pricing page per company. Do not copy the same prices from a second page.\n- Only use the company's current pricing page for prices. Never take prices from blog posts, launch announcements, or press articles.\n- If the pricing page mentions spot or preemptible pricing without numbers, run one more tavily_search on the provider's own domain (including its docs site) for \"<company> preemptible spot price per GPU hour\", and extract that page.\n- If the pricing page does not mention spot, preemptible, or interruptible pricing, add the line: \"spot | not listed on provider pricing page | <URL>\".\n\nReturn notes in exactly this format, with each note on its own line:\nPRICES:\n- <line copied exactly> | <URL> | provider / filing / tracker\nFACTS:\n- <fact> | <URL>\nNEWS:\n- <date> | <headline> | <URL>\n\nDo not convert units. Do not calculate. Do not fill gaps from memory.\nIf a search or extract fails, retry once, then write \"FAILED: <step>\".",
+          "maxIterations": 12
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        1008,
+        368
+      ],
+      "id": "2238eb5a-926d-41cb-82c5-2bbdb410e56e",
+      "name": "research_agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+          "mode": "list",
+          "cachedResultName": "Qwen/Qwen3-30B-A3B-Instruct-2507"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        496
+      ],
+      "id": "f8af889f-bcb3-4362-98ba-f7527daed5be",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "2QQQxu6ZRey31Hj5",
+          "name": "Nebius"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "General web search. Use to find pricing pages, earnings releases and filings.",
+        "topic": "general",
+        "timeRange": "any",
+        "searchDepth": "basic",
+        "includeAnswer": "none",
+        "options": {
+          "max_results": 5
+        }
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+      "typeVersion": 2.1,
+      "position": [
+        1328,
+        480
+      ],
+      "id": "44f48b72-558d-4331-8b0a-322c57f17d92",
+      "name": "tavily_search",
+      "credentials": {
+        "tavilyApi": {
+          "id": "QzXYNegh16CMIxgE",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "News from the last month about one company.",
+        "topic": "news",
+        "timeRange": "month",
+        "searchDepth": "basic",
+        "includeAnswer": "none",
+        "options": {
+          "max_results": 5
+        }
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+      "typeVersion": 2.1,
+      "position": [
+        1056,
+        624
+      ],
+      "id": "be971fe8-14b2-4293-84c2-ba8499e63209",
+      "name": "tavily_news",
+      "credentials": {
+        "tavilyApi": {
+          "id": "QzXYNegh16CMIxgE",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Reads the full text of a web page. Use on a pricing page URL to copy exact prices.",
+        "resource": "extract",
+        "extractDepth": "basic",
+        "options": {}
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavilyTool",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        592
+      ],
+      "id": "0c2a0f68-36ff-47ee-86b2-2b8f1075d499",
+      "name": "tavily_extract",
+      "credentials": {
+        "tavilyApi": {
+          "id": "QzXYNegh16CMIxgE",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "   Turns one company's research notes into structured price rows, facts, and news. Call once per company with that company's notes unchanged.",
+        "text": "=   {{ $fromAI('notes', 'The full research notes for one company, unchanged', 'string') }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Convert research notes about ONE company into structured data. Use only the notes. Do not add, round, or calculate prices.\n\nFor each PRICES line create one price row:\n- provider: the company name\n- gpu: H100, H200, B200, B300, GB200, GB300, or \"blended\" for ARR disclosures. Skip every other GPU (including GH200, A100, L40, L40S, RTX).\n- price_type: on_demand, spot, reserved, or implied_contract.\n  - \"preemptible\" or \"interruptible\" counts as spot.\n  - Any price that requires a minimum term (days, weeks, months, or years), a cluster reservation, or a commitment counts as reserved, even if the page does not use the word \"reserved\".\n  - Use on_demand only for prices you can rent by the hour with no minimum term.\n- price_usd: the number as written, or null if the line says contact sales or not offered\n- unit: per_node_hour if the price covers a whole node or instance with several GPUs (for example \"8x H100 node $49.24/hr\"); per_gpu_hour only if the line says the price is per GPU; arr_disclosure for ARR figures\n- gpus_per_node: the number of GPUs in the node or instance if the line shows it, otherwise null\n- arr_usd and gpu_count: only for arr_disclosure rows (convert \"$500m\" to 500000000 and \"23k\" to 23000), otherwise null\n- source_url and source_kind (provider, filing, tracker)\n- note: region, commitment term, or minimum size. Write \"not offered\" or \"contact sales\" ONLY when the line has no price. Otherwise put only the region, term, or size here, or leave it empty.\n- Only use prices that belong to this company. If a price belongs to a different company (for example a partner or customer), skip it.\n\nAlso copy FACTS and NEWS exactly, each with its URL. Set business_model to public rate card, contract-only, or hosting/colocation.",
+          "maxIterations": 7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 3,
+      "position": [
+        496,
+        368
+      ],
+      "id": "db14df6c-564c-4bcb-8f78-bf353a02dd61",
+      "name": "extraction_agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+          "mode": "list",
+          "cachedResultName": "Qwen/Qwen3-30B-A3B-Instruct-2507"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        608
+      ],
+      "id": "439c0702-9cd9-4078-9b22-d466c47846fb",
+      "name": "Qwen3-30B (extraction)",
+      "credentials": {
+        "openAiApi": {
+          "id": "2QQQxu6ZRey31Hj5",
+          "name": "Nebius"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"company\": { \"type\": \"string\" },\n    \"business_model\": { \"type\": \"string\" },\n    \"price_rows\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"provider\": { \"type\": \"string\" },\n          \"gpu\": { \"type\": \"string\" },\n          \"price_type\": { \"type\": \"string\" },\n          \"price_usd\": { \"type\": [\"number\", \"null\"] },\n          \"unit\": { \"type\": \"string\" },\n          \"gpus_per_node\": { \"type\": [\"number\", \"null\"] },\n          \"arr_usd\": { \"type\": [\"number\", \"null\"] },\n          \"gpu_count\": { \"type\": [\"number\", \"null\"] },\n          \"source_url\": { \"type\": \"string\" },\n          \"source_kind\": { \"type\": \"string\" },\n          \"note\": { \"type\": \"string\" }\n        },\n        \"required\": [\"provider\", \"gpu\", \"price_type\", \"price_usd\", \"unit\", \"source_url\", \"source_kind\"]\n      }\n    },\n    \"facts\": {\n      \"type\": \"array\",\n      \"items\": { \"type\": \"object\", \"properties\": { \"text\": { \"type\": \"string\" }, \"url\": { \"type\": \"string\" } } }\n    },\n    \"news\": {\n      \"type\": \"array\",\n      \"items\": { \"type\": \"object\", \"properties\": { \"date\": { \"type\": \"string\" }, \"headline\": { \"type\": \"string\" }, \"url\": { \"type\": \"string\" } } }\n    }\n  },\n  \"required\": [\"company\", \"business_model\", \"price_rows\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        544
+      ],
+      "id": "fd658767-568b-4743-8550-75a5ded81f57",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "description": "   Converts all price rows to $ per GPU-hour, computes price gaps vs the target, flags conflicting sources, and lists changes since the previous brief. Input: a JSON string {\"target\": ..., \"rows\": [...], \"previous_rows\": [...]}.",
+        "jsCode": "let raw = query;\nif (raw && typeof raw === \"object\" && raw.input !== undefined) raw = raw.input;\nlet input;\ntry {\n  input = typeof raw === \"string\" ? JSON.parse(raw) : raw;\n} catch (e) {\n  return \"ERROR: input is not valid JSON. Send one JSON object with the fields target, rows and previous_rows.\";\n}\nif (!input || typeof input !== \"object\") return \"ERROR: input is empty. Send one JSON object with the fields target, rows and previous_rows.\";\n\nconst scope = [\"GB300\", \"GB200\", \"B300\", \"B200\", \"H200\", \"H100\", \"BLENDED\"];\nfunction scopeGpu(g) {\n  const u = String(g || \"\").toUpperCase();\n  if (u.indexOf(\"GH200\") >= 0) return null;\n  for (let i = 0; i < scope.length; i++) { if (u.indexOf(scope[i]) >= 0) return scope[i] === \"BLENDED\" ? \"blended\" : scope[i]; }\n  return null;\n}\nconst bounds = { H100: [1, 12], H200: [1.2, 15], B200: [1.5, 20], B300: [2, 25], GB200: [3, 30], GB300: [3, 30] };\nconst aliases = { nbis: \"nebius\", crwv: \"coreweave\", iren: \"iren\", lambda: \"lambda\" };\nlet target = String(input.target || \"\").toLowerCase().trim();\nif (aliases[target]) target = aliases[target];\n\nconst rows = [];\n(Array.isArray(input.rows) ? input.rows : []).forEach(function (r) {\n  const g = scopeGpu(r.gpu);\n  if (g) rows.push(Object.assign({}, r, { gpu: g }));\n});\n\nlet prevRaw = input.previous_rows;\nif (typeof prevRaw === \"string\") { try { const p = JSON.parse(prevRaw); if (Array.isArray(p)) prevRaw = p; } catch (e) {} }\nconst prev = [];\nif (Array.isArray(prevRaw)) {\n  prevRaw.forEach(function (q) { if (q && typeof q.per_gpu_hour === \"number\") prev.push(q); });\n} else if (typeof prevRaw === \"string\") {\n  prevRaw.split(\";\").forEach(function (part) {\n    const f = part.trim().split(\"|\");\n    if (f.length >= 4 && !isNaN(parseFloat(f[3]))) prev.push({ provider: f[0].trim(), gpu: f[1].trim(), price_type: f[2].trim(), per_gpu_hour: parseFloat(f[3]) });\n  });\n}\n\nfunction round(x) { return Math.round(x * 100) / 100; }\nfunction sign(x) { return x >= 0 ? \"+\" : \"\"; }\nfunction key(r) { return r.gpu + \"|\" + r.price_type; }\nconst rank = { provider: 0, filing: 1, tracker: 2, blog: 3 };\nfunction rk(k) { return rank[k] === undefined ? 4 : rank[k]; }\nfunction isTarget(p) { const x = String(p || \"\").toLowerCase(); return x.length > 0 && target.length > 0 && (target.indexOf(x) >= 0 || x.indexOf(target) >= 0); }\nfunction addStatus(out, text) { out.status = out.status ? out.status + \"; \" + text : text; }\n\nconst normalized = rows.map(function (r) {\n  const out = Object.assign({}, r, { per_gpu_hour: null, status: \"\", implausible: false });\n  const note = String(r.note || \"\");\n  if (r.price_usd === null && /not offered/i.test(note)) { out.status = \"not offered\"; return out; }\n  if (r.unit === \"per_gpu_hour\" && typeof r.price_usd === \"number\") {\n    if (r.price_usd > 15 && r.gpus_per_node > 1) {\n      out.per_gpu_hour = round(r.price_usd / r.gpus_per_node);\n      out.status = \"assumed node price: $\" + r.price_usd + \" / \" + r.gpus_per_node + \" GPUs\";\n    } else out.per_gpu_hour = round(r.price_usd);\n  } else if (r.unit === \"per_node_hour\" && typeof r.price_usd === \"number\") {\n    if (r.gpus_per_node > 0) out.per_gpu_hour = round(r.price_usd / r.gpus_per_node);\n    else out.status = \"cannot normalize: GPUs per node missing\";\n  } else if (r.unit === \"arr_disclosure\") {\n    if (r.arr_usd > 0 && r.gpu_count > 0) {\n      out.per_gpu_hour = round(r.arr_usd / r.gpu_count / 8760);\n      out.status = \"implied: $\" + r.arr_usd + \" / \" + r.gpu_count + \" GPUs / 8,760 h\";\n    } else out.status = \"cannot derive: ARR or GPU count missing\";\n  } else if (r.price_usd === null) {\n    out.status = /contact/i.test(note) ? \"contact sales\" : \"not found\";\n  }\n  if (/\\/(blog|news|newsroom|press)\\//i.test(String(r.source_url || \"\"))) {\n    out.source_kind = \"blog\";\n    addStatus(out, \"blog/news source, verify\");\n  }\n  const b = bounds[out.gpu];\n  if (out.per_gpu_hour !== null && b && out.price_type !== \"implied_contract\") {\n    const low = out.price_type === \"spot\" ? b[0] * 0.6 : b[0];\n    if (out.per_gpu_hour < low || out.per_gpu_hour > b[1]) {\n      out.implausible = true;\n      addStatus(out, \"implausible price, excluded\");\n    }\n  }\n  return out;\n});\n\nconst best = {};\nconst conflicts = [];\nnormalized.filter(function (x) { return x.per_gpu_hour !== null && !x.implausible; }).forEach(function (r) {\n  const k = r.provider + \"|\" + key(r);\n  const cur = best[k];\n  if (!cur) { best[k] = r; return; }\n  if (Math.abs(cur.per_gpu_hour - r.per_gpu_hour) > 0.01) {\n    conflicts.push(r.provider + \" \" + r.gpu + \" \" + r.price_type + \": $\" + cur.per_gpu_hour + \" (\" + cur.source_url + \") vs $\" + r.per_gpu_hour + \" (\" + r.source_url + \")\");\n  }\n  if (rk(r.source_kind) < rk(cur.source_kind)) best[k] = r;\n});\nconst bestRows = Object.values(best);\n\nconst gaps = [];\nbestRows.filter(function (t) { return isTarget(t.provider); }).forEach(function (t) {\n  bestRows.filter(function (c) { return !isTarget(c.provider) && key(c) === key(t); }).forEach(function (c) {\n    const d = round(c.per_gpu_hour - t.per_gpu_hour);\n    const pct = t.per_gpu_hour ? round(d / t.per_gpu_hour * 100) : null;\n    const flag = c.source_kind === \"blog\" || t.source_kind === \"blog\" ? \" [blog/news source, verify]\" : \"\";\n    gaps.push(t.gpu + \" \" + t.price_type + \": \" + c.provider + \" $\" + c.per_gpu_hour + \" vs \" + t.provider + \" $\" + t.per_gpu_hour + \" = \" + sign(d) + \"$\" + d + \" per GPU-hour (\" + (pct === null ? \"n/a\" : sign(pct) + pct + \"%\") + \")\" + flag);\n  });\n});\n\nconst changes = [];\nbestRows.forEach(function (r) {\n  const p = prev.find(function (q) { return q.provider === r.provider && key(q) === key(r); });\n  if (p && Math.abs(p.per_gpu_hour - r.per_gpu_hour) > 0.01) {\n    const d = round(r.per_gpu_hour - p.per_gpu_hour);\n    changes.push(r.provider + \" \" + r.gpu + \" \" + r.price_type + \": $\" + p.per_gpu_hour + \" -> $\" + r.per_gpu_hour + \" (\" + sign(d) + \"$\" + d + \")\");\n  }\n});\n\nconst table = normalized.map(function (r) {\n  const price = r.per_gpu_hour !== null ? \"$\" + r.per_gpu_hour + (r.status ? \" (\" + r.status + \")\" : \"\") : r.status;\n  return r.provider + \" | \" + r.gpu + \" | \" + r.price_type + \" | \" + price + \" | \" + r.source_kind + \" | \" + r.source_url;\n});\nconst prices_compact = bestRows.map(function (r) { return r.provider + \"|\" + r.gpu + \"|\" + r.price_type + \"|\" + r.per_gpu_hour; }).join(\"; \");\n\nreturn JSON.stringify({ table: table, gaps: gaps, conflicts: conflicts, changes: changes, prices_compact: prices_compact });"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        224
+      ],
+      "id": "b62ad2aa-2a4b-4ee6-b129-56a83dc9adb5",
+      "name": "normalize_prices"
+    },
+    {
+      "parameters": {
+        "message": "=   Save this brief for {{ $tool.parameters.target }}?\n\n   {{ $tool.parameters.brief }}",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "disapproveLabel": "Request changes"
+          }
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatHitlTool",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        176
+      ],
+      "id": "676aca90-3143-4ef4-8482-0aa4dc9650ca",
+      "name": "gate_2_brief",
+      "webhookId": "f4750267-47d7-4f31-9fb1-0503d5ce7543"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Set Manually, Saves the final brief. Requires the user's approval.Insert row in Data table",
+        "dataTableId": {
+          "__rl": true,
+          "value": "dHm4O228179CORMC",
+          "mode": "list",
+          "cachedResultName": "briefs",
+          "cachedResultUrl": "/projects/LLAYxJBg6QJzjwb6/datatables/dHm4O228179CORMC"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "target": "={{ $fromAI('target', 'Target key', 'string') }}",
+            "run_date": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "brief": "={{ $fromAI('brief', 'The full brief in markdown', 'string') }}",
+            "prices_json": "={{ $fromAI('prices_json', 'The prices_compact text from normalize_prices, copied exactly. Never write a placeholder.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "run_date",
+              "displayName": "run_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "brief",
+              "displayName": "brief",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "prices_json",
+              "displayName": "prices_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        784,
+        320
+      ],
+      "id": "695ef4bc-bfaa-4c50-98e9-a2aaad1705b4",
+      "name": "save_brief"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "openai/gpt-oss-120b",
+          "mode": "list",
+          "cachedResultName": "openai/gpt-oss-120b"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "maxTokens": 16000,
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -256,
+        240
+      ],
+      "id": "2cd11dee-c8b4-49ef-ba1c-ebd9f8f3b0e5",
+      "name": "gpt-oss-120b (Orchastrator)",
+      "credentials": {
+        "openAiApi": {
+          "id": "2QQQxu6ZRey31Hj5",
+          "name": "Nebius"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_past_brief": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "discovery_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "discovery_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search the web in Tavily": {
+      "ai_tool": [
+        [
+          {
+            "node": "discovery_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_competitor_list": {
+      "ai_tool": [
+        [
+          {
+            "node": "gate_1_competitors",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gate_1_competitors": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "research_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tavily_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "research_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "research_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tavily_news": {
+      "ai_tool": [
+        [
+          {
+            "node": "research_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tavily_extract": {
+      "ai_tool": [
+        [
+          {
+            "node": "research_agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extraction_agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen3-30B (extraction)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "extraction_agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "extraction_agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_prices": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gate_2_brief": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_brief": {
+      "ai_tool": [
+        [
+          {
+            "node": "gate_2_brief",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gpt-oss-120b (Orchastrator)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7fecfe02-1ca6-498d-b798-8a5cb0538184",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2d48419d7066fb655597df985030c2322372ae54816e5dbf7fdfa7d730e6169a"
+  },
+  "nodeGroups": [],
+  "id": "03KyTQhTmwlDQzdr",
+  "tags": []
+}

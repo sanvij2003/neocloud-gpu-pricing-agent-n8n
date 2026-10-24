@@ -1,0 +1,12 @@
+{
+  "errorMessage": "Max iterations (12) reached. The agent could not complete the task within the allowed number of iterations.",
+  "errorDetails": {},
+  "n8nDetails": {
+    "nodeName": "research_agent",
+    "nodeType": "@n8n/n8n-nodes-langchain.agentTool",
+    "nodeVersion": 3,
+    "time": "10/24/2026, 11:09:06 AM",
+    "n8nVersion": "2.43.6 (Cloud)",
+    "note": "Run 5 (target CoreWeave). research_agent looped on IREN (about 6 searches and 3 extracts against a prompt budget of 3 and 1) until the hard iteration cap stopped it. Stack trace omitted."
+  }
+}
