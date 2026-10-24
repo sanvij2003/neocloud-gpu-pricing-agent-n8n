@@ -47,16 +47,16 @@ Both write actions sit behind a human-review gate: n8n blocks the save tool unti
 
 ## Repository layout
 ```
-README.md
-workflows/neocloud_pricing_agent.json   n8n workflow export (no credentials inside)
-samples/                                saved briefs from real runs
-eval/results.md                         failure tests, 5 scored runs, findings
-eval/run5_research_agent_max_iterations.json
-docs/                                   screenshots used in the report
+README.md                                  this file
+neocloud_pricing_agent.json                n8n workflow export (no credentials inside)
+eval_results.md                            failure tests, 5 scored runs, findings
+run5_research_agent_max_iterations.json    error evidence from run 5
+NBIS_run3.md                               sample brief (Nebius)
+IREN_run.md                                sample brief (IREN, after requested changes)
 ```
 
 ## How to run it
-1. Import `workflows/neocloud_pricing_agent.json` into n8n (Workflows > Import from file).
+1. Import `neocloud_pricing_agent.json` into n8n (Workflows > Import from file).
 2. Create credentials and select them on the nodes:
    - **Nebius**: OpenAI-type credential, base URL `https://api.tokenfactory.nebius.com/v1`, your Nebius API key. Used by all four model nodes.
    - **Tavily account**: your Tavily API key. Used by the four Tavily nodes.
@@ -69,7 +69,7 @@ docs/                                   screenshots used in the report
 Keep the chat trigger private. Never put API keys in node fields or prompts.
 
 ## Evaluation summary
-Full details in `eval/results.md`.
+Full details in ` eval_results.md`.
 - **Failure tests: 6 of 6 passed** (invalid input, broken search key, rejected competitor list, rejected brief, company with no rate card, memory comparison), each with a documented caveat.
 - **CoreWeave prices** matched the provider page once unit conversion moved into code (H100 $6.16, H200 $6.31, B200 $8.60 per GPU-hour).
 - **Lambda prices** were wrong or missing in all 5 runs (blog sources, a misread $0.50, reserved vs on-demand confusion).
